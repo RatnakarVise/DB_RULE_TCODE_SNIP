@@ -190,7 +190,7 @@ def _literal_replacement_snippet(literal_match: re.Match) -> str:
 # -------------------------------------------------------------------
 def extract_tcode_findings(code: str) -> List[Dict[str, Any]]:
     code = _normalize_code(code)
-    findings = []
+    findings: List[Dict[str, Any]] = []
     if not code:
         return findings
 
@@ -216,11 +216,18 @@ def extract_tcode_findings(code: str) -> List[Dict[str, Any]]:
             _build_call_transaction_replacement(m) if mapped else ""
         )
 
+        # multi-line span for statement
+        stmt_start_line = _line_of_offset(code, stmt_start)
+        stmt_line_count = stmt_text.count("\n") + 1
+        stmt_end_line = stmt_start_line + stmt_line_count - 1
+
         findings.append({
             "occurrence": "call_transaction",
             "tcode": src_tcode.upper(),
             "mapped_target": mapped,
             "line": line_no,
+            "line_start": stmt_start_line,
+            "line_end": stmt_end_line,
             "original_literal": original_literal,
             "replacement_snippet": replacement_stmt,
             "statement_snippet": stmt_text,
@@ -250,11 +257,17 @@ def extract_tcode_findings(code: str) -> List[Dict[str, Any]]:
 
         replacement_lit = f"{q}{mapped}{q}" if mapped else ""
 
+        stmt_start_line = _line_of_offset(code, stmt_start)
+        stmt_line_count = stmt_text.count("\n") + 1
+        stmt_end_line = stmt_start_line + stmt_line_count - 1
+
         findings.append({
             "occurrence": "sy_tcode_compare",
             "tcode": tcode.upper(),
             "mapped_target": mapped,
             "line": line_no,
+            "line_start": stmt_start_line,
+            "line_end": stmt_end_line,
             "original_literal": original_literal,
             "replacement_snippet": replacement_lit,
             "statement_snippet": stmt_text,
@@ -275,11 +288,17 @@ def extract_tcode_findings(code: str) -> List[Dict[str, Any]]:
         stmt_start, stmt_end = _statement_span_at(code, im.start())
         stmt_text = code[stmt_start:stmt_end].strip()
 
+        stmt_start_line = _line_of_offset(code, stmt_start)
+        stmt_line_count = stmt_text.count("\n") + 1
+        stmt_end_line = stmt_start_line + stmt_line_count - 1
+
         findings.append({
             "occurrence": "sy_tcode_in",
             "tcode": None,
             "mapped_target": None,
             "line": line_no,
+            "line_start": stmt_start_line,
+            "line_end": stmt_end_line,
             "original_literal": "",
             "replacement_snippet": "",
             "statement_snippet": stmt_text,
@@ -310,11 +329,17 @@ def extract_tcode_findings(code: str) -> List[Dict[str, Any]]:
 
         replacement_lit = f"{q}{mapped}{q}"
 
+        stmt_start_line = _line_of_offset(code, stmt_start)
+        stmt_line_count = stmt_text.count("\n") + 1
+        stmt_end_line = stmt_start_line + stmt_line_count - 1
+
         findings.append({
             "occurrence": "string_literal",
             "tcode": lit_val.upper(),
             "mapped_target": mapped,
             "line": line_no,
+            "line_start": stmt_start_line,
+            "line_end": stmt_end_line,
             "original_literal": original_literal,
             "replacement_snippet": replacement_lit,
             "statement_snippet": stmt_text,
@@ -329,28 +354,37 @@ def extract_tcode_findings(code: str) -> List[Dict[str, Any]]:
 # RESPONSE FORMAT BUILDER (THIS IS THE PART WE CHANGE)
 # -------------------------------------------------------------------
 def build_response(unit: Unit, issues: List[Dict[str, Any]]):
+    findings_out = []
+
+    for i in issues:
+        # fall back to single line if start/end not present
+        rel_start = i.get("line_start", i["line"])
+        rel_end = i.get("line_end", i["line"])
+
+        starting_line_abs = unit.start_line + rel_start - 1
+        ending_line_abs = unit.start_line + rel_end - 1
+
+        findings_out.append({
+            "prog_name": unit.pgm_name,
+            "incl_name": unit.inc_name,
+            "types": unit.type,
+            "blockname": unit.name,
+            "starting_line": starting_line_abs,
+            "ending_line": ending_line_abs,
+            "issues_type": "TCodeMapping",          # fixed category
+            "severity": "error",                    # ALWAYS error now
+            "message": i["message"],
+            "suggestion": i["suggestion"],
+            "snippet": i["statement_snippet"].replace("\n", "\\n"),
+        })
+
     return {
         "pgm_name": unit.pgm_name,
         "inc_name": unit.inc_name,
         "type": unit.type,
         "name": unit.name,
         "code": unit.code,
-        "findings": [
-            {
-                "prog_name": unit.pgm_name,
-                "incl_name": unit.inc_name,
-                "types": unit.type,
-                "blockname": unit.name,
-                "starting_line": i["line"],
-                "ending_line": i["line"],
-                "issues_type": "TCodeMapping",          # FIXED AS PER YOUR REQUIREMENT
-                "severity": "warning",                  # FIXED AS PER YOUR REQUIREMENT
-                "message": i["message"],
-                "suggestion": i["suggestion"],
-                "snippet": i["statement_snippet"]
-            }
-            for i in issues
-        ]
+        "findings": findings_out
     }
 
 

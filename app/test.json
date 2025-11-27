@@ -1,0 +1,12 @@
+[
+  {
+    "pgm_name": "ZTEST_TCODE",
+    "inc_name": "ZTEST_TCODE",
+    "type": "PROG",
+    "name": "MAIN",
+    "class_implementation": "",
+    "start_line": 120,
+    "end_line": 200,
+    "code": "DATA lv_msg TYPE string.\n\nCALL TRANSACTION \n  'VA01' \n  AND SKIP FIRST SCREEN.\n\nIF sy-tcode = 'VA02'.\n  lv_msg = 'VA03'.\nENDIF.\n\nWRITE: / lv_msg."
+  }
+]
